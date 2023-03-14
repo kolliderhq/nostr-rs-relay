@@ -13,8 +13,8 @@ use crate::info::RelayInfo;
 use crate::nip05;
 use crate::notice::Notice;
 use crate::payment;
-use crate::payment::InvoiceInfo;
 use crate::payment::PaymentMessage;
+use crate::payment::{InvoiceInfo, NewAccountRequestOrigin};
 use crate::repo::NostrRepo;
 use crate::server::Error::CommandUnknownError;
 use crate::server::EventWrapper::{WrappedAuth, WrappedEvent};
@@ -374,19 +374,16 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            let payment_message;
             if let Ok((admission_status, _)) = repo.get_account_balance(&key.unwrap()).await {
                 if admission_status {
                     return Ok(Response::builder()
                         .status(StatusCode::OK)
                         .body(Body::from("Already admitted"))
                         .unwrap());
-                } else {
-                    payment_message = PaymentMessage::CheckAccount(pubkey.clone());
                 }
-            } else {
-                payment_message = PaymentMessage::NewAccount(pubkey.clone());
             }
+            let payment_message =
+                PaymentMessage::NewAccount(pubkey.clone(), NewAccountRequestOrigin::Web);
 
             // Send message on payment channel requesting invoice
             if payment_tx.send(payment_message).is_err() {
@@ -444,8 +441,8 @@ async fn handle_web_request(
             }
 
             let resp = json!({
-                "invoice": invoice_info.bolt11
-                "price": settings.pay_to_relay.admission_cost
+                "invoice": invoice_info.bolt11,
+                "price": settings.pay_to_relay.admission_cost,
                 "pubkey": pubkey
             });
 
