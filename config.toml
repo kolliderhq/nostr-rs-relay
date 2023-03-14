@@ -27,7 +27,7 @@ description = "A newly created nostr-rs-relay.\n\nCustomize this with your own i
 [database]
 # Database engine (sqlite/postgres).  Defaults to sqlite.
 # Support for postgres is currently experimental.
-#engine = "sqlite"
+engine = "postgres"
 
 # Directory for SQLite files.  Defaults to the current directory.  Can
 # also be specified (and overriden) with the "--db dirname" command
@@ -50,7 +50,7 @@ description = "A newly created nostr-rs-relay.\n\nCustomize this with your own i
 
 # Database connection string.  Required for postgres; not used for
 # sqlite.
-#connection = "postgresql://postgres:nostr@localhost:7500/nostr"
+# connection = "postgresql://nostr:password@localhost:5432/nostr"
 
 
 [grpc]
@@ -179,7 +179,13 @@ reject_future_seconds = 1800
 
 [pay_to_relay]
 # Enable pay to relay
-#enabled = false
+#enabled = true
+#processor="LightningAddress"
+#lightning_address=""
+#check_invoice_endpoint=""
+
+# The cost to be admitted to relay
+#admission_cost = 8000
 
 # The cost to be admitted to relay
 #admission_cost = 4200
@@ -188,13 +194,14 @@ reject_future_seconds = 1800
 #cost_per_event = 0
 
 # Url of lnbits api
-#node_url = "<node url>"
+#node_url = ""
 
 # LNBits api secret
-#api_secret = "<ln bits api>"
+#api_secret = ""
+
 
 # Terms of service
-#terms_message = """
+#terms_message = ""
 #This service (and supporting services) are provided "as is", without warranty of any kind, express or implied.
 #
 #By using this service, you agree:
@@ -215,3 +222,5 @@ reject_future_seconds = 1800
 # Whether or not new sign ups should be allowed
 #sign_ups = false
 #secret_key = "<nostr nsec>"
+#sign_ups = true
+#secret_key = ""

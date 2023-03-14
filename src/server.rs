@@ -443,96 +443,16 @@ async fn handle_web_request(
                 qr_code = "Could not render image".to_string();
             }
 
-            let html_result = format!(
-                r#"
-<!DOCTYPE html>
-<html>
-  <head>
-  <meta charset="UTF-8">
-    <style>
-      body {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        font-family: Arial, sans-serif;
-        background-color:  #6320a7 ;
-        color: white;
-      }}
-      #copy-button {{
-        background-color: #bb5f0d ;
-        color: white;
-        padding: 10px 20px;
-        border-radius: 5px;
-        border: none;
-        cursor: pointer;
-      }}
-      #copy-button:hover {{
-        background-color: #8f29f4;
-      }}
-    .container {{
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 400px;
-    }}
-    a {{
-        color: pink;
-    }}
-    </style>
-  </head>
-  <body>
-    <div style="width:75%;">
-      <h3>
-        To use this relay, an admission fee of {} sats is required. By paying the fee, you agree to the <a href='terms'>terms</a>.
-      </h3>
-    </div>
-    <div>
-        <div style="max-height: 300px;">
-            {}
-        </div>
-    </div>
-    <div>
-    <div style="width: 75%;">
-        <p style="overflow-wrap: break-word; width: 500px;">{}</p>
-        <button id="copy-button">Copy</button>
-    </div>
-    <div>
-        <p> This page will not refresh </p>
-        <p> Verify admission <a href=/account?pubkey={}>here</a> once you have paid</p>
-    </div>
-    </div>
-  </body>
-</html>
-
-
-<script>
-  const copyButton = document.getElementById("copy-button");
-  if (navigator.clipboard) {{
-    copyButton.addEventListener("click", function() {{
-      const textToCopy = "{}";
-      navigator.clipboard.writeText(textToCopy).then(function() {{
-        console.log("Text copied to clipboard");
-      }}, function(err) {{
-        console.error("Could not copy text: ", err);
-      }});
-    }});
-  }} else {{
-    copyButton.style.display = "none";
-    console.warn("Clipboard API is not supported in this browser");
-  }}
-</script>
-"#,
-                settings.pay_to_relay.admission_cost,
-                qr_code,
-                invoice_info.bolt11,
-                pubkey,
-                invoice_info.bolt11
-            );
+            let resp = json!({
+                "invoice": invoice_info.bolt11
+                "price": settings.pay_to_relay.admission_cost
+                "pubkey": pubkey
+            });
 
             Ok(Response::builder()
                 .status(StatusCode::OK)
-                .body(Body::from(html_result))
+                .header("Content-Type", "text/json")
+                .body(Body::from(resp.to_string()))
                 .unwrap())
         }
         ("/account", false) => {
@@ -1255,7 +1175,6 @@ async fn nostr_server(
                         break;
                     }
                 };
-
                 // convert ws_next into proto_next
                 match nostr_msg {
                     Ok(NostrMessage::EventMsg(ec)) => {
