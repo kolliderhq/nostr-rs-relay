@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::event::Event;
 use crate::nauthz;
 use crate::notice::Notice;
-use crate::payment::PaymentMessage;
+use crate::payment::{NewAccountRequestOrigin, PaymentMessage};
 use crate::repo::postgres::{PostgresPool, PostgresRepo};
 use crate::repo::sqlite::SqliteRepo;
 use crate::repo::NostrRepo;
@@ -244,7 +244,10 @@ pub async fn db_writer(
                         info!("Unregistered user");
                         if settings.pay_to_relay.sign_ups {
                             payment_tx
-                                .send(PaymentMessage::NewAccount(event.pubkey))
+                                .send(PaymentMessage::NewAccount(
+                                    event.pubkey,
+                                    NewAccountRequestOrigin::Event,
+                                ))
                                 .ok();
                         }
                         let msg = "Pubkey not registered";
