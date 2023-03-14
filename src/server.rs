@@ -63,10 +63,6 @@ use tungstenite::handshake;
 use tungstenite::protocol::Message;
 use tungstenite::protocol::WebSocketConfig;
 
-use routerify::{Router, RouterService};
-// Import the CORS crate.
-use routerify_cors::enable_cors_all;
-
 pub async fn preflight(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         dbg!("ERHERERERERERE");
 		let _whole_body = hyper::body::aggregate(req).await.unwrap();
