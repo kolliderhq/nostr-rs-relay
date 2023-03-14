@@ -28,7 +28,7 @@ use hyper::header::ACCEPT;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::upgrade::Upgraded;
 use hyper::{
-    header, server::conn::AddrStream, upgrade, Body, Request, Response, Server, StatusCode,
+    header, server::conn::AddrStream, upgrade, Body, Request, Response, Server, StatusCode, Method
 };
 use nostr::key::FromPkStr;
 use nostr::key::Keys;
@@ -63,6 +63,21 @@ use tungstenite::handshake;
 use tungstenite::protocol::Message;
 use tungstenite::protocol::WebSocketConfig;
 
+use routerify::{Router, RouterService};
+// Import the CORS crate.
+use routerify_cors::enable_cors_all;
+
+pub async fn preflight(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+        dbg!("ERHERERERERERE");
+		let _whole_body = hyper::body::aggregate(req).await.unwrap();
+		Ok(Response::builder()
+			.status(StatusCode::OK)
+			.header("Access-Control-Allow-Origin", "*")
+			.header("Access-Control-Allow-Headers", "*")
+			.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			.body(Body::default()).unwrap())
+	}
+
 /// Handle arbitrary HTTP requests, including for `WebSocket` upgrades.
 #[allow(clippy::too_many_arguments)]
 async fn handle_web_request(
@@ -81,9 +96,12 @@ async fn handle_web_request(
     match (
         request.uri().path(),
         request.headers().contains_key(header::UPGRADE),
+        request.method(),
     ) {
         // Request for / as websocket
-        ("/", true) => {
+
+        ("/invoice", _, &Method::OPTIONS) => preflight(request).await,
+        ("/", true, _) => {
             trace!("websocket with upgrade request");
             //assume request is a handshake, so create the handshake response
             let response = match handshake::server::create_response_with_body(&request, || {
@@ -163,7 +181,7 @@ async fn handle_web_request(
             Ok::<_, Infallible>(response)
         }
         // Request for Relay info
-        ("/", false) => {
+        ("/", false, _) => {
             // handle request at root with no upgrade header
             // Check if this is a nostr server info request
             let accept_header = &request.headers().get(ACCEPT);
@@ -200,7 +218,7 @@ async fn handle_web_request(
                 .body(Body::from("Please use a Nostr client to connect."))
                 .unwrap())
         }
-        ("/metrics", false) => {
+        ("/metrics", false, _) => {
             let mut buffer = vec![];
             let encoder = TextEncoder::new();
             let metric_families = registry.gather();
@@ -212,7 +230,7 @@ async fn handle_web_request(
                 .body(Body::from(buffer))
                 .unwrap())
         }
-        ("/favicon.ico", false) => {
+        ("/favicon.ico", false, _) => {
             if let Some(favicon_bytes) = favicon {
                 info!("returning favicon");
                 Ok(Response::builder()
@@ -230,7 +248,7 @@ async fn handle_web_request(
             }
         }
         // LN bits callback endpoint for paid invoices
-        ("/lnbits", false) => {
+        ("/lnbits", false, _) => {
             let callback: payment::lnbits::LNBitsCallback =
                 serde_json::from_slice(&to_bytes(request.into_body()).await.unwrap()).unwrap();
             debug!("LNBits callback: {callback:?}");
@@ -249,13 +267,13 @@ async fn handle_web_request(
                 .unwrap())
         }
         // Endpoint for relays terms
-        ("/terms", false) => Ok(Response::builder()
+        ("/terms", false, _) => Ok(Response::builder()
             .status(200)
             .header("Content-Type", "text/plain")
             .body(Body::from(settings.pay_to_relay.terms_message))
             .unwrap()),
         // Endpoint to allow users to sign up
-        ("/join", false) => {
+        ("/join", false, _) => {
             // Stops sign ups if disabled
             if !settings.pay_to_relay.sign_ups {
                 return Ok(Response::builder()
@@ -340,7 +358,7 @@ async fn handle_web_request(
                 .unwrap())
         }
         // Endpoint to display invoice
-        ("/invoice", false) => {
+        ("/invoice", false, _) => {
             // Stops sign ups if disabled
             if !settings.pay_to_relay.sign_ups {
                 return Ok(Response::builder()
@@ -443,19 +461,21 @@ async fn handle_web_request(
                 qr_code = "Could not render image".to_string();
             }
 
+
             let resp = json!({
-                "invoice": invoice_info.bolt11
-                "price": settings.pay_to_relay.admission_cost
+                "invoice": invoice_info.bolt11,
+                "price": settings.pay_to_relay.admission_cost,
                 "pubkey": pubkey
             });
 
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/json")
+                .header("Access-Control-Allow-Origin", "*")
                 .body(Body::from(resp.to_string()))
                 .unwrap())
         }
-        ("/account", false) => {
+        ("/account", false, _) => {
             // Stops sign ups if disabled
             if !settings.pay_to_relay.enabled {
                 return Ok(Response::builder()
@@ -537,7 +557,7 @@ async fn handle_web_request(
                 .unwrap())
         }
         // later balance
-        (_, _) => {
+        (_, _, _) => {
             // handle any other url
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -870,7 +890,7 @@ pub fn start_server(settings: &Settings, shutdown_rx: MpscReceiver<()>) -> Resul
             let metrics = metrics.clone();
             async move {
                 // service_fn converts our function into a `Service`
-                Ok::<_, Infallible>(service_fn(move |request: Request<Body>| {
+                Ok::<_, Infallible>(service_fn(move |mut request: Request<Body>| {
                     handle_web_request(
                         request,
                         repo.clone(),
@@ -887,6 +907,15 @@ pub fn start_server(settings: &Settings, shutdown_rx: MpscReceiver<()>) -> Resul
                 }))
             }
         });
+
+        // let router = Router::builder()
+        //     .middleware(enable_cors_all())
+        //     .get("/", make_svc)
+        //     .build()
+        //     .unwrap();
+
+        // let service = RouterService::new(router).unwrap();
+
         let server = Server::bind(&socket_addr)
             .serve(make_svc)
             .with_graceful_shutdown(ctrl_c_or_signal(webserver_shutdown_listen));
