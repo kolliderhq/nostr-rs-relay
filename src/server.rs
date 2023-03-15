@@ -28,15 +28,13 @@ use hyper::header::ACCEPT;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::upgrade::Upgraded;
 use hyper::{
-    header, server::conn::AddrStream, upgrade, Body, Request, Response, Server, StatusCode, Method
+    header, server::conn::AddrStream, upgrade, Body, Method, Request, Response, Server, StatusCode,
 };
 use nostr::key::FromPkStr;
 use nostr::key::Keys;
 use prometheus::IntCounterVec;
 use prometheus::IntGauge;
 use prometheus::{Encoder, Histogram, HistogramOpts, IntCounter, Opts, Registry, TextEncoder};
-use qrcode::render::svg;
-use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -64,15 +62,15 @@ use tungstenite::protocol::Message;
 use tungstenite::protocol::WebSocketConfig;
 
 pub async fn preflight(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-        dbg!("ERHERERERERERE");
-		let _whole_body = hyper::body::aggregate(req).await.unwrap();
-		Ok(Response::builder()
-			.status(StatusCode::OK)
-			.header("Access-Control-Allow-Origin", "*")
-			.header("Access-Control-Allow-Headers", "*")
-			.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-			.body(Body::default()).unwrap())
-	}
+    let _whole_body = hyper::body::aggregate(req).await.unwrap();
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Headers", "*")
+        .header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        .body(Body::default())
+        .unwrap())
+}
 
 /// Handle arbitrary HTTP requests, including for `WebSocket` upgrades.
 #[allow(clippy::too_many_arguments)]
@@ -95,7 +93,6 @@ async fn handle_web_request(
         request.method(),
     ) {
         // Request for / as websocket
-
         ("/invoice", _, &Method::OPTIONS) => preflight(request).await,
         ("/", true, _) => {
             trace!("websocket with upgrade request");
@@ -441,19 +438,6 @@ async fn handle_web_request(
 
             // Since invoice is checked to be not none, unwrap
             let invoice_info = invoice_info.unwrap();
-
-            let qr_code: String;
-            if let Ok(code) = QrCode::new(invoice_info.bolt11.as_bytes()) {
-                qr_code = code
-                    .render()
-                    .min_dimensions(200, 200)
-                    .dark_color(svg::Color("#800000"))
-                    .light_color(svg::Color("#ffff80"))
-                    .build();
-            } else {
-                qr_code = "Could not render image".to_string();
-            }
-
 
             let resp = json!({
                 "invoice": invoice_info.bolt11,
@@ -883,7 +867,7 @@ pub fn start_server(settings: &Settings, shutdown_rx: MpscReceiver<()>) -> Resul
             let metrics = metrics.clone();
             async move {
                 // service_fn converts our function into a `Service`
-                Ok::<_, Infallible>(service_fn(move |mut request: Request<Body>| {
+                Ok::<_, Infallible>(service_fn(move |request: Request<Body>| {
                     handle_web_request(
                         request,
                         repo.clone(),

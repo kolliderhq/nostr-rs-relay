@@ -570,15 +570,19 @@ ON CONFLICT (id) DO NOTHING"#,
     }
 
     /// Admit account
-    async fn admit_account(&self, pub_key: &Keys, admission_cost: u64) -> Result<()> {
+    async fn admit_account(
+        &self,
+        pub_key: &Keys,
+        admission_cost: u64,
+        admission_days: u64,
+    ) -> Result<()> {
         let pub_key = pub_key.public_key().to_string();
-        sqlx::query(
-            "UPDATE account SET is_admitted = TRUE, balance = balance - $1 WHERE pubkey = $2",
-        )
-        .bind(admission_cost as i64)
-        .bind(pub_key)
-        .execute(&self.conn)
-        .await?;
+        let query = format!("UPDATE account SET is_admitted = TRUE, tos_accepted_at = NOW(), balance = balance - $1, subscribed_until = GREATEST(COALESCE(subscribed_until, NOW()), NOW()) + INTERVAL '{} days' WHERE pubkey = $2", admission_days);
+        sqlx::query(&query)
+            .bind(admission_cost as i64)
+            .bind(pub_key)
+            .execute(&self.conn)
+            .await?;
         Ok(())
     }
 

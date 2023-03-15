@@ -23,7 +23,7 @@ pragma mmap_size = 17179869184; -- cap mmap at 16GB
 "##;
 
 /// Latest database version
-pub const DB_VERSION: usize = 18;
+pub const DB_VERSION: usize = 19;
 
 /// Schema definition
 const INIT_SQL: &str = formatcp!(
@@ -244,6 +244,9 @@ pub fn upgrade_db(conn: &mut PooledConnection) -> Result<usize> {
             }
             if curr_version == 17 {
                 curr_version = mig_17_to_18(conn)?;
+            }
+            if curr_version == 18 {
+                curr_version = mig_18_to_19(conn)?;
             }
 
             if curr_version == DB_VERSION {
@@ -838,4 +841,22 @@ PRAGMA user_version = 18;
         }
     }
     Ok(18)
+}
+
+fn mig_18_to_19(conn: &mut PooledConnection) -> Result<usize> {
+    info!("database schema needs update from 18->19");
+    let upgrade_sql = r##"
+ALTER TABLE account ADD COLUMN subscribed_until INTEGER;
+PRAGMA user_version = 19;
+"##;
+    match conn.execute_batch(upgrade_sql) {
+        Ok(()) => {
+            info!("database schema upgraded v18 -> v19");
+        }
+        Err(err) => {
+            error!("update failed: {}", err);
+            panic!("database could not be upgraded");
+        }
+    }
+    Ok(19)
 }

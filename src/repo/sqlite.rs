@@ -752,16 +752,22 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Admit account
-    async fn admit_account(&self, pub_key: &Keys, admission_cost: u64) -> Result<()> {
+    async fn admit_account(
+        &self,
+        pub_key: &Keys,
+        admission_cost: u64,
+        admission_days: u64,
+    ) -> Result<()> {
         let pub_key = pub_key.public_key().to_string();
         let mut conn = self.write_pool.get()?;
         let pub_key = pub_key.to_owned();
         tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
             {
-                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1 WHERE pubkey=?2;";
+                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1, subscribed_until = MAX(COALESCE(subscribed_until, strftime('%s','now')), strftime('%s','now')) + ?2 WHERE pubkey=?3;";
                 let mut stmt = tx.prepare(query)?;
-                stmt.execute(params![admission_cost, pub_key])?;
+                let admission_interval = admission_days * 24 * 60 * 60;
+                stmt.execute(params![admission_cost, admission_interval, pub_key])?;
             }
             tx.commit()?;
             let ok: Result<()> = Ok(());

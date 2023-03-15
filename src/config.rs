@@ -2,7 +2,6 @@
 use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::warn;
 
 use crate::payment::Processor;
 
@@ -99,6 +98,7 @@ pub struct PayToRelay {
     pub lightning_address: Option<String>,
     #[serde(default)]
     pub check_invoice_endpoint: Option<String>,
+    pub admission_days: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,7 +194,7 @@ impl Settings {
         match from_file {
             Ok(f) => f,
             Err(e) => {
-                warn!("Error reading config file ({:?})", e);
+                eprintln!("Error reading config file ({:?})", e);
                 default_settings
             }
         }
@@ -304,6 +304,7 @@ impl Default for Settings {
                 processor: Processor::LNBits,
                 lightning_address: None,
                 check_invoice_endpoint: None,
+                admission_days: 30,
             },
             verified_users: VerifiedUsers {
                 mode: VerifiedUsersMode::Disabled,

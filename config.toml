@@ -187,8 +187,8 @@ reject_future_seconds = 1800
 # The cost to be admitted to relay
 #admission_cost = 8000
 
-# The cost to be admitted to relay
-#admission_cost = 4200
+# The admission duration
+# admission_days = 30
 
 # The cost in sats per post
 #cost_per_event = 0
@@ -220,7 +220,5 @@ reject_future_seconds = 1800
 #"""
 
 # Whether or not new sign ups should be allowed
-#sign_ups = false
-#secret_key = "<nostr nsec>"
 #sign_ups = true
 #secret_key = ""
