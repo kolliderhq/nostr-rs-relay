@@ -13,6 +13,7 @@ use crate::server::NostrMetrics;
 use crate::subscription::{ReqFilter, Subscription};
 use crate::utils::{is_hex, unix_time};
 use async_trait::async_trait;
+use chrono::{DateTime, LocalResult, TimeZone, Utc};
 use hex;
 use r2d2;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -777,19 +778,30 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Gets if the account is admitted and balance
-    async fn get_account_balance(&self, pub_key: &Keys) -> Result<(bool, u64)> {
+    async fn get_account_balance(&self, pub_key: &Keys) -> Result<(bool, u64, DateTime<Utc>)> {
         let pub_key = pub_key.public_key().to_string();
         let mut conn = self.write_pool.get()?;
         let pub_key = pub_key.to_owned();
         tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
-            let query = "SELECT is_admitted, balance FROM account WHERE pubkey = ?1;";
+            let query =
+                "SELECT is_admitted, balance, subscribed_until FROM account WHERE pubkey = ?1;";
             let mut stmt = tx.prepare_cached(query)?;
             let fields = stmt.query_row(params![pub_key], |r| {
                 let is_admitted: bool = r.get(0)?;
                 let balance: u64 = r.get(1)?;
+                let subscribed_until_timestamp: i64 = r.get(2)?;
+                let subscribed_until =
+                    match Utc.timestamp_millis_opt(subscribed_until_timestamp * 1000) {
+                        LocalResult::Single(dt) => dt,
+                        _ => {
+                            return Err(rusqlite::Error::InvalidQuery);
+                        }
+                    };
+                let is_still_admitted =
+                    is_admitted && Utc::now().timestamp() < subscribed_until_timestamp;
                 // create a tuple since we can't throw non-rusqlite errors in this closure
-                Ok((is_admitted, balance))
+                Ok((is_still_admitted, balance, subscribed_until))
             })?;
             Ok(fields)
         })

@@ -385,7 +385,7 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            if let Ok((admission_status, _)) = repo.get_account_balance(&key.unwrap()).await {
+            if let Ok((admission_status, _, _)) = repo.get_account_balance(&key.unwrap()).await {
                 if admission_status {
                     return Ok(Response::builder()
                         .status(StatusCode::OK)
@@ -486,16 +486,17 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            let text =
-                if let Ok((admission_status, _)) = repo.get_account_balance(&key.unwrap()).await {
-                    if admission_status {
-                        r#"<span style="color: green;">is</span>"#
-                    } else {
-                        r#"<span style="color: red;">is not</span>"#
-                    }
+            let text = if let Ok((admission_status, _, _)) =
+                repo.get_account_balance(&key.unwrap()).await
+            {
+                if admission_status {
+                    r#"<span style="color: green;">is</span>"#
                 } else {
-                    "Could not get admission status"
-                };
+                    r#"<span style="color: red;">is not</span>"#
+                }
+            } else {
+                "Could not get admission status"
+            };
 
             let html_result = format!(
                 r#"

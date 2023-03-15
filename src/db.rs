@@ -208,7 +208,7 @@ pub async fn db_writer(
             {
                 let key = Keys::from_pk_str(&event.pubkey).unwrap();
                 match repo.get_account_balance(&key).await {
-                    Ok((user_admitted, balance)) => {
+                    Ok((user_admitted, balance, _subscribed_until)) => {
                         // Checks to make sure user is admitted
                         if !user_admitted {
                             debug!("user: {}, is not admitted", &event.pubkey);

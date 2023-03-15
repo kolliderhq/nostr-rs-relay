@@ -6,6 +6,7 @@ use crate::payment::{InvoiceInfo, InvoiceStatus};
 use crate::subscription::Subscription;
 use crate::utils::unix_time;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use nostr::Keys;
 use rand::Rng;
 
@@ -72,7 +73,7 @@ pub trait NostrRepo: Send + Sync {
     ) -> Result<()>;
 
     /// Gets user balance if they are an admitted pubkey
-    async fn get_account_balance(&self, pubkey: &Keys) -> Result<(bool, u64)>;
+    async fn get_account_balance(&self, pubkey: &Keys) -> Result<(bool, u64, DateTime<Utc>)>;
 
     /// Update account balance
     async fn update_account_balance(
