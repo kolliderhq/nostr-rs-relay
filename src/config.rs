@@ -99,6 +99,7 @@ pub struct PayToRelay {
     #[serde(default)]
     pub check_invoice_endpoint: Option<String>,
     pub admission_days: u64,
+    pub sign_up_invoice_from_event: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -305,6 +306,7 @@ impl Default for Settings {
                 lightning_address: None,
                 check_invoice_endpoint: None,
                 admission_days: 30,
+                sign_up_invoice_from_event: false,
             },
             verified_users: VerifiedUsers {
                 mode: VerifiedUsersMode::Disabled,

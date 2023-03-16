@@ -269,8 +269,23 @@ impl Payment {
                 Ok(invoice_info)
             }
             SignUpOrigin::Event => {
-                self.send_admission_message(pubkey, None).await?;
-                Err(Error::AuthFailure)
+                if self.settings.pay_to_relay.sign_up_invoice_from_event {
+                    let invoice_info = self.processor.get_invoice(&key, amount).await?;
+
+                    // Persist invoice to DB
+                    self.repo
+                        .create_invoice_record(&key, invoice_info.clone())
+                        .await?;
+
+                    // Admission event invoice and terms to pubkey that is joining
+                    self.send_admission_message(pubkey, Some(&invoice_info))
+                        .await?;
+
+                    Ok(invoice_info)
+                } else {
+                    self.send_admission_message(pubkey, None).await?;
+                    Err(Error::AuthFailure)
+                }
             }
         }
     }

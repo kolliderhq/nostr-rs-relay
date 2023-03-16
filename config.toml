@@ -221,4 +221,7 @@ reject_future_seconds = 1800
 
 # Whether or not new sign ups should be allowed
 #sign_ups = true
+# Whether sign up invoice should be generated for each new pubkey upon receiving an event
+# If false, then sign up invoices are generated only using web API
+#sign_up_invoice_from_event = false
 #secret_key = ""
