@@ -2,6 +2,7 @@ use crate::error::{Error, Result};
 use crate::event::Event;
 use crate::payment::lnbits::LNBitsPaymentProcessor;
 use crate::repo::NostrRepo;
+use crate::utils::fetch_latest_usd_price;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -151,8 +152,11 @@ impl Payment {
                     Ok(PaymentMessage::SignUp(pubkey, origin)) => {
                         info!("payment event for {:?}", pubkey);
                         // REVIEW: This will need to change for cost per event
-                        let amount = self.settings.pay_to_relay.admission_cost;
-                        let invoice_info = self.get_invoice_info(&pubkey, amount, origin).await?;
+                        let usd_price = fetch_latest_usd_price().await.map_err(|_| Error::CustomError(String::from("BTCUSD price not available")))?;
+
+                        let price_in_sats = ((self.settings.pay_to_relay.admission_cost as f64  / (usd_price * 100_f64)) * 100000000_f64) as u64;
+
+                        let invoice_info = self.get_invoice_info(&pubkey, price_in_sats, origin).await?;
                         // TODO: should handle this error
                         self.payment_tx.send(PaymentMessage::Invoice(pubkey, invoice_info)).ok();
                     },
@@ -164,7 +168,7 @@ impl Payment {
                         if let Some(invoice_info) = self.repo.get_unpaid_invoice(&keys).await? {
                             match self.check_invoice_status(&invoice_info.payment_hash).await? {
                                 InvoiceStatus::Paid => {
-                                    self.repo.admit_account(&keys, self.settings.pay_to_relay.admission_cost, self.settings.pay_to_relay.admission_days).await?;
+                                    self.repo.admit_account(&keys, invoice_info.amount, self.settings.pay_to_relay.admission_days).await?;
                                     self.payment_tx.send(PaymentMessage::AccountAdmitted(pubkey)).ok();
                                 }
                                 _ => {
@@ -175,12 +179,12 @@ impl Payment {
                     }
                     Ok(PaymentMessage::InvoicePaid(payment_hash)) => {
                         if self.check_invoice_status(&payment_hash).await?.eq(&InvoiceStatus::Paid) {
-                            let pubkey = self.repo
+                            let (pubkey, amount) = self.repo
                                 .update_invoice(&payment_hash, InvoiceStatus::Paid)
                                 .await?;
 
                             let key = Keys::from_pk_str(&pubkey)?;
-                            self.repo.admit_account(&key, self.settings.pay_to_relay.admission_cost, self.settings.pay_to_relay.admission_cost).await?;
+                            self.repo.admit_account(&key, amount, self.settings.pay_to_relay.admission_cost).await?;
                         }
                     }
                     Ok(_) => {

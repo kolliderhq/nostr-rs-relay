@@ -860,12 +860,13 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Update invoice record
-    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<String> {
+    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<(String, u64)> {
         let mut conn = self.write_pool.get()?;
         let payment_hash = payment_hash.to_owned();
-        let pub_key = tokio::task::spawn_blocking(move || {
+        let res = tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
             let pubkey: String;
+            let amt: u64;
             {
 
                 // Get required invoice info for given payment hash
@@ -899,14 +900,15 @@ impl NostrRepo for SqliteRepo {
                 }
 
                 pubkey = pub_key;
+                amt = amount;
             }
 
             tx.commit()?;
-            let ok: Result<String> = Ok(pubkey);
+            let ok: Result<(String, u64)> = Ok((pubkey, amt));
             ok
         })
         .await?;
-        pub_key
+        res
     }
 
     /// Get the most recent invoice for a given pubkey
