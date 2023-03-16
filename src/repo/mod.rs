@@ -73,7 +73,10 @@ pub trait NostrRepo: Send + Sync {
     ) -> Result<()>;
 
     /// Gets user balance if they are an admitted pubkey
-    async fn get_account_balance(&self, pubkey: &Keys) -> Result<(bool, u64, DateTime<Utc>)>;
+    async fn get_account_balance(
+        &self,
+        pubkey: &Keys,
+    ) -> Result<(bool, u64, Option<DateTime<Utc>>)>;
 
     /// Update account balance
     async fn update_account_balance(

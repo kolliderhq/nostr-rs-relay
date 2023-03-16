@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS account (
 pubkey TEXT PRIMARY KEY,
 is_admitted INTEGER NOT NULL DEFAULT 0,
 balance INTEGER NOT NULL DEFAULT 0,
-tos_accepted_at INTEGER
+tos_accepted_at INTEGER,
+subscribed_until INTEGER
 );
 
 -- Create account index

@@ -331,7 +331,7 @@ mod m006 {
             sql: vec![
                 r#"
 -- Alter account table
-ALTER TABLE "account" ADD COLUMN subscribed_until TIMESTAMP;
+ALTER TABLE "account" ADD COLUMN subscribed_until TIMESTAMPTZ;
         "#,
             ],
         }

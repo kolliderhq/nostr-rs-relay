@@ -587,7 +587,10 @@ ON CONFLICT (id) DO NOTHING"#,
     }
 
     /// Gets if the account is admitted and balance
-    async fn get_account_balance(&self, pub_key: &Keys) -> Result<(bool, u64, DateTime<Utc>)> {
+    async fn get_account_balance(
+        &self,
+        pub_key: &Keys,
+    ) -> Result<(bool, u64, Option<DateTime<Utc>>)> {
         let pub_key = pub_key.public_key().to_string();
         let query = r#"SELECT
             is_admitted,
@@ -597,14 +600,15 @@ ON CONFLICT (id) DO NOTHING"#,
             WHERE pubkey = $1
             LIMIT 1"#;
 
-        let result = sqlx::query_as::<_, (bool, i64, DateTime<Utc>)>(query)
+        let result = sqlx::query_as::<_, (bool, i64, Option<DateTime<Utc>>)>(query)
             .bind(pub_key)
             .fetch_optional(&self.conn)
             .await?
             .ok_or(error::Error::SqlxError(RowNotFound))?;
 
         let is_admitted = result.0;
-        let is_still_admitted = is_admitted && Utc::now() < result.2;
+        let utc_now = Utc::now();
+        let is_still_admitted = is_admitted && utc_now <= result.2.unwrap_or(utc_now);
         Ok((is_still_admitted, result.1 as u64, result.2))
     }
 

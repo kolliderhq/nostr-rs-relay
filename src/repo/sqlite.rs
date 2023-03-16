@@ -778,7 +778,10 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Gets if the account is admitted and balance
-    async fn get_account_balance(&self, pub_key: &Keys) -> Result<(bool, u64, DateTime<Utc>)> {
+    async fn get_account_balance(
+        &self,
+        pub_key: &Keys,
+    ) -> Result<(bool, u64, Option<DateTime<Utc>>)> {
         let pub_key = pub_key.public_key().to_string();
         let mut conn = self.write_pool.get()?;
         let pub_key = pub_key.to_owned();
@@ -790,16 +793,16 @@ impl NostrRepo for SqliteRepo {
             let fields = stmt.query_row(params![pub_key], |r| {
                 let is_admitted: bool = r.get(0)?;
                 let balance: u64 = r.get(1)?;
-                let subscribed_until_timestamp: i64 = r.get(2)?;
-                let subscribed_until =
-                    match Utc.timestamp_millis_opt(subscribed_until_timestamp * 1000) {
-                        LocalResult::Single(dt) => dt,
-                        _ => {
-                            return Err(rusqlite::Error::InvalidQuery);
-                        }
-                    };
-                let is_still_admitted =
-                    is_admitted && Utc::now().timestamp() < subscribed_until_timestamp;
+                let subscribed_until_timestamp: Option<i64> = r.get(2)?;
+                let subscribed_until = subscribed_until_timestamp.and_then(|timestamp| {
+                    match Utc.timestamp_millis_opt(timestamp * 1000) {
+                        LocalResult::Single(dt) => Some(dt),
+                        _ => None,
+                    }
+                });
+                let utc_now_timestamp = Utc::now().timestamp();
+                let is_still_admitted = is_admitted
+                    && utc_now_timestamp < subscribed_until_timestamp.unwrap_or(utc_now_timestamp);
                 // create a tuple since we can't throw non-rusqlite errors in this closure
                 Ok((is_still_admitted, balance, subscribed_until))
             })?;
