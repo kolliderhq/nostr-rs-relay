@@ -652,7 +652,7 @@ ON CONFLICT (id) DO NOTHING"#,
     }
 
     /// Update invoice record
-    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<String> {
+    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<(String, u64)> {
         debug!("Payment Hash: {}", payment_hash);
         let query = "SELECT pubkey, status, amount FROM invoice WHERE payment_hash=$1;";
         let (pubkey, prev_invoice_status, amount) =
@@ -683,7 +683,7 @@ ON CONFLICT (id) DO NOTHING"#,
                 .await?;
         }
 
-        Ok(pubkey)
+        Ok((pubkey, amount as u64))
     }
 
     /// Get the most recent invoice for a given pubkey

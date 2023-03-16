@@ -50,7 +50,7 @@ engine = "postgres"
 
 # Database connection string.  Required for postgres; not used for
 # sqlite.
-# connection = "postgresql://nostr:password@localhost:5432/nostr"
+connection = "postgresql://nostr:password@localhost:5432/nostr"
 
 
 [grpc]
@@ -179,13 +179,13 @@ reject_future_seconds = 1800
 
 [pay_to_relay]
 # Enable pay to relay
-#enabled = true
-#processor="LightningAddress"
-#lightning_address=""
-#check_invoice_endpoint=""
+enabled = true
+processor="LightningAddress"
+lightning_address="relay@kollider.me"
+check_invoice_endpoint="/api/checkpayment"
 
 # The cost to be admitted to relay
-#admission_cost = 8000
+admission_cost = 200
 
 # The cost to be admitted to relay
 #admission_cost = 4200
@@ -194,14 +194,14 @@ reject_future_seconds = 1800
 #cost_per_event = 0
 
 # Url of lnbits api
-#node_url = ""
+node_url = "https://lnbits.eldamar.icu/api/v1/wallet"
 
 # LNBits api secret
-#api_secret = ""
+api_secret = "428aad58752f42509849f2a8a69e2714"
 
 
 # Terms of service
-#terms_message = ""
+terms_message = "yo boi"
 #This service (and supporting services) are provided "as is", without warranty of any kind, express or implied.
 #
 #By using this service, you agree:
@@ -222,5 +222,5 @@ reject_future_seconds = 1800
 # Whether or not new sign ups should be allowed
 #sign_ups = false
 #secret_key = "<nostr nsec>"
-#sign_ups = true
-#secret_key = ""
+sign_ups = true
+secret_key = "nsec10346sjttfrcer206ggvlzctgzcx6vr8jega52lvj69x25cwd4rtq4f5lny"

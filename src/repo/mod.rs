@@ -81,7 +81,7 @@ pub trait NostrRepo: Send + Sync {
     async fn create_invoice_record(&self, pubkey: &Keys, invoice_info: InvoiceInfo) -> Result<()>;
 
     /// Update Invoice for given payment hash
-    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<String>;
+    async fn update_invoice(&self, payment_hash: &str, status: InvoiceStatus) -> Result<(String, u64)>;
 
     /// Get the most recent invoice for a given pubkey
     /// invoice must be unpaid and not expired

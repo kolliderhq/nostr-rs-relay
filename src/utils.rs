@@ -2,6 +2,7 @@
 use bech32::FromBase32;
 use std::time::SystemTime;
 use url::Url;
+use serde::{Serialize, Deserialize};
 
 /// Seconds since 1970.
 #[must_use]
@@ -41,6 +42,53 @@ pub fn host_str(url: &String) -> Option<String> {
     Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(|s| s.to_string()))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LndhubxPriceResult {
+    symbol: String,
+    price: String,
+    change_24h: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LndhubxPriceResponse {
+    success: bool,
+    result: Vec<LndhubxPriceResult>
+}
+
+pub async fn fetch_latest_usd_price() -> Result<f64, ()> {
+
+    let res = match reqwest::get("https://kollider.me/api/get_spot_prices").await {
+        Ok(r) => r,
+        Err(err) => {
+            dbg!(&err);
+            return Err(())
+        }
+    };
+
+    let body: LndhubxPriceResponse = match res.json().await {
+        Ok(b) => b,
+        Err(err) => {
+            dbg!(&err);
+            return Err(())
+        }
+    };
+
+    let btcUSDPrice = body.result.iter().filter( |i| {
+        i.symbol == String::from("BTCUSD")
+    }).collect::<Vec<&LndhubxPriceResult>>();
+
+    if btcUSDPrice.len() > 0 {
+        if let Ok(p) = btcUSDPrice[0].price.parse::<f64>() {
+            Ok(p)
+        } else {
+            Err(())
+        }
+    } else {
+        Err(())
+    }
+
 }
 
 #[cfg(test)]

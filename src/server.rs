@@ -19,6 +19,7 @@ use crate::repo::NostrRepo;
 use crate::server::Error::CommandUnknownError;
 use crate::server::EventWrapper::{WrappedAuth, WrappedEvent};
 use crate::subscription::Subscription;
+use crate::utils::fetch_latest_usd_price;
 use futures::SinkExt;
 use futures::StreamExt;
 use governor::{Jitter, Quota, RateLimiter};
@@ -64,7 +65,6 @@ use tungstenite::protocol::Message;
 use tungstenite::protocol::WebSocketConfig;
 
 pub async fn preflight(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-        dbg!("ERHERERERERERE");
 		let _whole_body = hyper::body::aggregate(req).await.unwrap();
 		Ok(Response::builder()
 			.status(StatusCode::OK)
@@ -269,7 +269,7 @@ async fn handle_web_request(
             .body(Body::from(settings.pay_to_relay.terms_message))
             .unwrap()),
         // Endpoint to allow users to sign up
-        ("/join", false, _) => {
+        ("/price", false, _) => {
             // Stops sign ups if disabled
             if !settings.pay_to_relay.sign_ups {
                 return Ok(Response::builder()
@@ -279,78 +279,23 @@ async fn handle_web_request(
                     .unwrap());
             }
 
-            let html = r#"
-<!doctype HTML>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      font-family: Arial, sans-serif;
-      background-color: #6320a7;
-      color: white;
-    }
+            let usd_price = match fetch_latest_usd_price().await {
+                Ok(p) => p,
+                Err(_) => 25000.0
+            };
 
-    .container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 400px;
-    }
+            let price_in_sats = ((settings.pay_to_relay.admission_cost as f64  / (usd_price * 100_f64)) * 100000000_f64) as u64;
 
-    a {
-      color: pink;
-    }
+            let resp = json!({
+                "price_in_sats": price_in_sats,
+                "price_in_usd": settings.pay_to_relay.admission_cost as f64 / 100_f64
+            });
 
-    input[type="text"] {
-        width: 100%;
-        max-width: 500px;
-        box-sizing: border-box;
-        overflow-x: auto;
-        white-space: nowrap;
-    }
-  </style>
-</head>
-<body>
-  <div style="width:75%;">
-    <h1>Enter your pubkey</h1>
-    <form action="/invoice" onsubmit="return checkForm(this);">
-      <input type="text" name="pubkey" id="pubkey-input"><br><br>
-      <input type="checkbox" id="terms" required>
-      <label for="terms">I agree to the <a href="/terms">terms and conditions</a></label><br><br>
-      <button type="submit">Submit</button>
-    </form>
-    <button id="get-public-key-btn">Get Public Key</button>
-  </div>
-  <script>
-    function checkForm(form) {
-      if (!form.terms.checked) {
-        alert("Please agree to the terms and conditions");
-        return false;
-      }
-      return true;
-    }
-
-    const pubkeyInput = document.getElementById('pubkey-input');
-      const getPublicKeyBtn = document.getElementById('get-public-key-btn');
-      getPublicKeyBtn.addEventListener('click', async function() {
-        try {
-          const publicKey = await window.nostr.getPublicKey();
-          pubkeyInput.value = publicKey;
-        } catch (error) {
-          console.error(error);
-        }
-      });
-  </script>
-</body>
-</html>
-            "#;
             Ok(Response::builder()
                 .status(StatusCode::OK)
-                .body(Body::from(html))
+                .header("Content-Type", "text/json")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(Body::from(resp.to_string()))
                 .unwrap())
         }
         // Endpoint to display invoice
@@ -454,10 +399,9 @@ async fn handle_web_request(
                 qr_code = "Could not render image".to_string();
             }
 
-
             let resp = json!({
                 "invoice": invoice_info.bolt11,
-                "price": settings.pay_to_relay.admission_cost,
+                "price": invoice_info.amount,
                 "pubkey": pubkey
             });
 
