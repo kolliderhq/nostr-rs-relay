@@ -188,7 +188,7 @@ check_invoice_endpoint=""
 admission_cost = 200
 
 # The admission duration
-# admission_days = 30
+admission_days = 30
 
 # The cost in sats per post
 #cost_per_event = 0
