@@ -79,7 +79,7 @@ pub struct InvoiceInfo {
 }
 
 #[derive(Debug, Clone)]
-pub enum NewAccountRequestOrigin {
+pub enum SignUpOrigin {
     Web,
     Event,
 }
@@ -87,8 +87,8 @@ pub enum NewAccountRequestOrigin {
 /// Message variants for the payment channel
 #[derive(Debug, Clone)]
 pub enum PaymentMessage {
-    /// New account
-    NewAccount(String, NewAccountRequestOrigin),
+    /// Sing up
+    SignUp(String, SignUpOrigin),
     /// Check account,
     CheckAccount(String),
     /// Account Admitted
@@ -149,13 +149,10 @@ impl Payment {
         tokio::select! {
             m = self.payment_rx.recv() => {
                 match m {
-                    Ok(PaymentMessage::NewAccount(pubkey, origin)) => {
+                    Ok(PaymentMessage::SignUp(pubkey, origin)) => {
                         info!("payment event for {:?}", pubkey);
                         // REVIEW: This will need to change for cost per event
-                        let usd_price = match fetch_latest_usd_price().await {
-                            Ok(p) => p,
-                            Err(_) => 25000.0
-                        };
+                        let usd_price = fetch_latest_usd_price().await.map_err(|_| Error::CustomError(String::from("BTCUSD price not available")))?;
 
                         let price_in_sats = ((self.settings.pay_to_relay.admission_cost as f64  / (usd_price * 100_f64)) * 100000000_f64) as u64;
 
@@ -171,7 +168,7 @@ impl Payment {
                         if let Some(invoice_info) = self.repo.get_unpaid_invoice(&keys).await? {
                             match self.check_invoice_status(&invoice_info.payment_hash).await? {
                                 InvoiceStatus::Paid => {
-                                    self.repo.admit_account(&keys, invoice_info.amount).await?;
+                                    self.repo.admit_account(&keys, invoice_info.amount, self.settings.pay_to_relay.admission_days).await?;
                                     self.payment_tx.send(PaymentMessage::AccountAdmitted(pubkey)).ok();
                                 }
                                 _ => {
@@ -187,7 +184,7 @@ impl Payment {
                                 .await?;
 
                             let key = Keys::from_pk_str(&pubkey)?;
-                            self.repo.admit_account(&key, amount).await?;
+                            self.repo.admit_account(&key, amount, self.settings.pay_to_relay.admission_cost).await?;
                         }
                     }
                     Ok(_) => {
@@ -247,7 +244,7 @@ impl Payment {
         &self,
         pubkey: &str,
         amount: u64,
-        origin: NewAccountRequestOrigin,
+        origin: SignUpOrigin,
     ) -> Result<InvoiceInfo> {
         // If user is already in DB this will be false
         // This avoids recreating admission invoices
@@ -261,7 +258,7 @@ impl Payment {
         }
 
         match origin {
-            NewAccountRequestOrigin::Web => {
+            SignUpOrigin::Web => {
                 let invoice_info = self.processor.get_invoice(&key, amount).await?;
 
                 // Persist invoice to DB
@@ -275,9 +272,24 @@ impl Payment {
 
                 Ok(invoice_info)
             }
-            NewAccountRequestOrigin::Event => {
-                self.send_admission_message(pubkey, None).await?;
-                Err(Error::AuthFailure)
+            SignUpOrigin::Event => {
+                if self.settings.pay_to_relay.sign_up_invoice_from_event {
+                    let invoice_info = self.processor.get_invoice(&key, amount).await?;
+
+                    // Persist invoice to DB
+                    self.repo
+                        .create_invoice_record(&key, invoice_info.clone())
+                        .await?;
+
+                    // Admission event invoice and terms to pubkey that is joining
+                    self.send_admission_message(pubkey, Some(&invoice_info))
+                        .await?;
+
+                    Ok(invoice_info)
+                } else {
+                    self.send_admission_message(pubkey, None).await?;
+                    Err(Error::AuthFailure)
+                }
             }
         }
     }

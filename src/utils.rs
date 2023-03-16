@@ -1,8 +1,8 @@
 //! Common utility functions
 use bech32::FromBase32;
+use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use url::Url;
-use serde::{Serialize, Deserialize};
 
 /// Seconds since 1970.
 #[must_use]
@@ -54,16 +54,15 @@ pub struct LndhubxPriceResult {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LndhubxPriceResponse {
     success: bool,
-    result: Vec<LndhubxPriceResult>
+    result: Vec<LndhubxPriceResult>,
 }
 
 pub async fn fetch_latest_usd_price() -> Result<f64, ()> {
-
     let res = match reqwest::get("https://kollider.me/api/get_spot_prices").await {
         Ok(r) => r,
         Err(err) => {
             dbg!(&err);
-            return Err(())
+            return Err(());
         }
     };
 
@@ -71,16 +70,18 @@ pub async fn fetch_latest_usd_price() -> Result<f64, ()> {
         Ok(b) => b,
         Err(err) => {
             dbg!(&err);
-            return Err(())
+            return Err(());
         }
     };
 
-    let btcUSDPrice = body.result.iter().filter( |i| {
-        i.symbol == String::from("BTCUSD")
-    }).collect::<Vec<&LndhubxPriceResult>>();
+    let btc_usd_price = body
+        .result
+        .iter()
+        .filter(|i| i.symbol == String::from("BTCUSD"))
+        .collect::<Vec<&LndhubxPriceResult>>();
 
-    if btcUSDPrice.len() > 0 {
-        if let Ok(p) = btcUSDPrice[0].price.parse::<f64>() {
+    if btc_usd_price.len() > 0 {
+        if let Ok(p) = btc_usd_price[0].price.parse::<f64>() {
             Ok(p)
         } else {
             Err(())
@@ -88,7 +89,6 @@ pub async fn fetch_latest_usd_price() -> Result<f64, ()> {
     } else {
         Err(())
     }
-
 }
 
 #[cfg(test)]

@@ -14,7 +14,7 @@ use crate::nip05;
 use crate::notice::Notice;
 use crate::payment;
 use crate::payment::PaymentMessage;
-use crate::payment::{InvoiceInfo, NewAccountRequestOrigin};
+use crate::payment::{InvoiceInfo, SignUpOrigin};
 use crate::repo::NostrRepo;
 use crate::server::Error::CommandUnknownError;
 use crate::server::EventWrapper::{WrappedAuth, WrappedEvent};
@@ -29,15 +29,13 @@ use hyper::header::ACCEPT;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::upgrade::Upgraded;
 use hyper::{
-    header, server::conn::AddrStream, upgrade, Body, Request, Response, Server, StatusCode, Method
+    header, server::conn::AddrStream, upgrade, Body, Method, Request, Response, Server, StatusCode,
 };
 use nostr::key::FromPkStr;
 use nostr::key::Keys;
 use prometheus::IntCounterVec;
 use prometheus::IntGauge;
 use prometheus::{Encoder, Histogram, HistogramOpts, IntCounter, Opts, Registry, TextEncoder};
-use qrcode::render::svg;
-use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -65,14 +63,15 @@ use tungstenite::protocol::Message;
 use tungstenite::protocol::WebSocketConfig;
 
 pub async fn preflight(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-		let _whole_body = hyper::body::aggregate(req).await.unwrap();
-		Ok(Response::builder()
-			.status(StatusCode::OK)
-			.header("Access-Control-Allow-Origin", "*")
-			.header("Access-Control-Allow-Headers", "*")
-			.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-			.body(Body::default()).unwrap())
-	}
+    let _whole_body = hyper::body::aggregate(req).await.unwrap();
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Headers", "*")
+        .header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        .body(Body::default())
+        .unwrap())
+}
 
 /// Handle arbitrary HTTP requests, including for `WebSocket` upgrades.
 #[allow(clippy::too_many_arguments)]
@@ -95,7 +94,6 @@ async fn handle_web_request(
         request.method(),
     ) {
         // Request for / as websocket
-
         ("/invoice", _, &Method::OPTIONS) => preflight(request).await,
         ("/price", _, &Method::OPTIONS) => preflight(request).await,
         ("/", true, _) => {
@@ -282,10 +280,20 @@ async fn handle_web_request(
 
             let usd_price = match fetch_latest_usd_price().await {
                 Ok(p) => p,
-                Err(_) => 25000.0
+                Err(_) => {
+                    return Ok(Response::builder()
+                        .status(401)
+                        .header("Content-Type", "text/plain")
+                        .body(Body::from(
+                            "Sorry, current price could not be fetched at the moment",
+                        ))
+                        .unwrap());
+                }
             };
 
-            let price_in_sats = ((settings.pay_to_relay.admission_cost as f64  / (usd_price * 100_f64)) * 100000000_f64) as u64;
+            let price_in_sats = ((settings.pay_to_relay.admission_cost as f64
+                / (usd_price * 100_f64))
+                * 100000000_f64) as u64;
 
             let resp = json!({
                 "price_in_sats": price_in_sats,
@@ -334,16 +342,12 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            if let Ok((admission_status, _)) = repo.get_account_balance(&key.unwrap()).await {
-                if admission_status {
-                    return Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .body(Body::from("Already admitted"))
-                        .unwrap());
-                }
-            }
-            let payment_message =
-                PaymentMessage::NewAccount(pubkey.clone(), NewAccountRequestOrigin::Web);
+            let subscribed_until = repo.get_account_balance(&key.unwrap()).await.ok().and_then(
+                |(_admission_status, _balance, subscribed_until)| {
+                    subscribed_until.map(|dt| dt.timestamp())
+                },
+            );
+            let payment_message = PaymentMessage::SignUp(pubkey.clone(), SignUpOrigin::Web);
 
             // Send message on payment channel requesting invoice
             if payment_tx.send(payment_message).is_err() {
@@ -388,22 +392,11 @@ async fn handle_web_request(
             // Since invoice is checked to be not none, unwrap
             let invoice_info = invoice_info.unwrap();
 
-            let qr_code: String;
-            if let Ok(code) = QrCode::new(invoice_info.bolt11.as_bytes()) {
-                qr_code = code
-                    .render()
-                    .min_dimensions(200, 200)
-                    .dark_color(svg::Color("#800000"))
-                    .light_color(svg::Color("#ffff80"))
-                    .build();
-            } else {
-                qr_code = "Could not render image".to_string();
-            }
-
             let resp = json!({
                 "invoice": invoice_info.bolt11,
                 "price": invoice_info.amount,
-                "pubkey": pubkey
+                "pubkey": pubkey,
+                "current_subscription_until": subscribed_until
             });
 
             Ok(Response::builder()
@@ -447,16 +440,17 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            let text =
-                if let Ok((admission_status, _)) = repo.get_account_balance(&key.unwrap()).await {
-                    if admission_status {
-                        r#"<span style="color: green;">is</span>"#
-                    } else {
-                        r#"<span style="color: red;">is not</span>"#
-                    }
+            let text = if let Ok((admission_status, _, _)) =
+                repo.get_account_balance(&key.unwrap()).await
+            {
+                if admission_status {
+                    r#"<span style="color: green;">is</span>"#
                 } else {
-                    "Could not get admission status"
-                };
+                    r#"<span style="color: red;">is not</span>"#
+                }
+            } else {
+                "Could not get admission status"
+            };
 
             let html_result = format!(
                 r#"
@@ -828,7 +822,7 @@ pub fn start_server(settings: &Settings, shutdown_rx: MpscReceiver<()>) -> Resul
             let metrics = metrics.clone();
             async move {
                 // service_fn converts our function into a `Service`
-                Ok::<_, Infallible>(service_fn(move |mut request: Request<Body>| {
+                Ok::<_, Infallible>(service_fn(move |request: Request<Body>| {
                     handle_web_request(
                         request,
                         repo.clone(),

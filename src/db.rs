@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::event::Event;
 use crate::nauthz;
 use crate::notice::Notice;
-use crate::payment::{NewAccountRequestOrigin, PaymentMessage};
+use crate::payment::{PaymentMessage, SignUpOrigin};
 use crate::repo::postgres::{PostgresPool, PostgresRepo};
 use crate::repo::sqlite::SqliteRepo;
 use crate::repo::NostrRepo;
@@ -208,7 +208,7 @@ pub async fn db_writer(
             {
                 let key = Keys::from_pk_str(&event.pubkey).unwrap();
                 match repo.get_account_balance(&key).await {
-                    Ok((user_admitted, balance)) => {
+                    Ok((user_admitted, balance, _subscribed_until)) => {
                         // Checks to make sure user is admitted
                         if !user_admitted {
                             debug!("user: {}, is not admitted", &event.pubkey);
@@ -222,6 +222,14 @@ pub async fn db_writer(
                                 .try_send(Notice::blocked(event.id, "User is not admitted"))
                                 .ok();
                             continue;
+                        } else {
+                            // even if the user is admitted, but has got any unpaid invoice
+                            // check whether it was paid to extend subscription
+                            if repo.get_unpaid_invoice(&key).await.ok().flatten().is_some() {
+                                payment_tx
+                                    .send(PaymentMessage::CheckAccount(event.pubkey.clone()))
+                                    .ok();
+                            }
                         }
 
                         // Checks that user has enough balance to post
@@ -244,10 +252,7 @@ pub async fn db_writer(
                         info!("Unregistered user");
                         if settings.pay_to_relay.sign_ups {
                             payment_tx
-                                .send(PaymentMessage::NewAccount(
-                                    event.pubkey,
-                                    NewAccountRequestOrigin::Event,
-                                ))
+                                .send(PaymentMessage::SignUp(event.pubkey, SignUpOrigin::Event))
                                 .ok();
                         }
                         let msg = "Pubkey not registered";

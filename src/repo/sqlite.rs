@@ -13,6 +13,7 @@ use crate::server::NostrMetrics;
 use crate::subscription::{ReqFilter, Subscription};
 use crate::utils::{is_hex, unix_time};
 use async_trait::async_trait;
+use chrono::{DateTime, LocalResult, TimeZone, Utc};
 use hex;
 use r2d2;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -752,16 +753,22 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Admit account
-    async fn admit_account(&self, pub_key: &Keys, admission_cost: u64) -> Result<()> {
+    async fn admit_account(
+        &self,
+        pub_key: &Keys,
+        admission_cost: u64,
+        admission_days: u64,
+    ) -> Result<()> {
         let pub_key = pub_key.public_key().to_string();
         let mut conn = self.write_pool.get()?;
         let pub_key = pub_key.to_owned();
         tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
             {
-                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1 WHERE pubkey=?2;";
+                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1, subscribed_until = MAX(COALESCE(subscribed_until, CAST(strftime('%s','now') AS INTEGER)), CAST(strftime('%s','now') AS INTEGER)) + ?2 WHERE pubkey=?3;";
                 let mut stmt = tx.prepare(query)?;
-                stmt.execute(params![admission_cost, pub_key])?;
+                let admission_interval = admission_days * 24 * 60 * 60;
+                stmt.execute(params![admission_cost, admission_interval, pub_key])?;
             }
             tx.commit()?;
             let ok: Result<()> = Ok(());
@@ -771,19 +778,33 @@ impl NostrRepo for SqliteRepo {
     }
 
     /// Gets if the account is admitted and balance
-    async fn get_account_balance(&self, pub_key: &Keys) -> Result<(bool, u64)> {
+    async fn get_account_balance(
+        &self,
+        pub_key: &Keys,
+    ) -> Result<(bool, u64, Option<DateTime<Utc>>)> {
         let pub_key = pub_key.public_key().to_string();
         let mut conn = self.write_pool.get()?;
         let pub_key = pub_key.to_owned();
         tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
-            let query = "SELECT is_admitted, balance FROM account WHERE pubkey = ?1;";
+            let query =
+                "SELECT is_admitted, balance, subscribed_until FROM account WHERE pubkey = ?1;";
             let mut stmt = tx.prepare_cached(query)?;
             let fields = stmt.query_row(params![pub_key], |r| {
                 let is_admitted: bool = r.get(0)?;
                 let balance: u64 = r.get(1)?;
+                let subscribed_until_timestamp: Option<i64> = r.get(2)?;
+                let subscribed_until = subscribed_until_timestamp.and_then(|timestamp| {
+                    match Utc.timestamp_millis_opt(timestamp * 1000) {
+                        LocalResult::Single(dt) => Some(dt),
+                        _ => None,
+                    }
+                });
+                let utc_now_timestamp = Utc::now().timestamp();
+                let is_still_admitted = is_admitted
+                    && utc_now_timestamp < subscribed_until_timestamp.unwrap_or(utc_now_timestamp);
                 // create a tuple since we can't throw non-rusqlite errors in this closure
-                Ok((is_admitted, balance))
+                Ok((is_still_admitted, balance, subscribed_until))
             })?;
             Ok(fields)
         })
