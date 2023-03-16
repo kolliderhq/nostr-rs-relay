@@ -180,9 +180,9 @@ reject_future_seconds = 1800
 [pay_to_relay]
 # Enable pay to relay
 enabled = true
-processor="LightningAddress"
-lightning_address="relay@kollider.me"
-check_invoice_endpoint="/api/checkpayment"
+processor=""
+lightning_address=""
+check_invoice_endpoint=""
 
 # The cost to be admitted to relay
 admission_cost = 200
