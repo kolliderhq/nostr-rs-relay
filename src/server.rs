@@ -97,6 +97,7 @@ async fn handle_web_request(
         // Request for / as websocket
 
         ("/invoice", _, &Method::OPTIONS) => preflight(request).await,
+        ("/price", _, &Method::OPTIONS) => preflight(request).await,
         ("/", true, _) => {
             trace!("websocket with upgrade request");
             //assume request is a handshake, so create the handshake response
