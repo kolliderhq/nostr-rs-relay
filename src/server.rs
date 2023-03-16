@@ -14,7 +14,7 @@ use crate::nip05;
 use crate::notice::Notice;
 use crate::payment;
 use crate::payment::PaymentMessage;
-use crate::payment::{InvoiceInfo, NewAccountRequestOrigin};
+use crate::payment::{InvoiceInfo, SignUpOrigin};
 use crate::repo::NostrRepo;
 use crate::server::Error::CommandUnknownError;
 use crate::server::EventWrapper::{WrappedAuth, WrappedEvent};
@@ -393,8 +393,7 @@ async fn handle_web_request(
                         .unwrap());
                 }
             }
-            let payment_message =
-                PaymentMessage::NewAccount(pubkey.clone(), NewAccountRequestOrigin::Web);
+            let payment_message = PaymentMessage::SignUp(pubkey.clone(), SignUpOrigin::Web);
 
             // Send message on payment channel requesting invoice
             if payment_tx.send(payment_message).is_err() {

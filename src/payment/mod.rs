@@ -78,7 +78,7 @@ pub struct InvoiceInfo {
 }
 
 #[derive(Debug, Clone)]
-pub enum NewAccountRequestOrigin {
+pub enum SignUpOrigin {
     Web,
     Event,
 }
@@ -86,8 +86,8 @@ pub enum NewAccountRequestOrigin {
 /// Message variants for the payment channel
 #[derive(Debug, Clone)]
 pub enum PaymentMessage {
-    /// New account
-    NewAccount(String, NewAccountRequestOrigin),
+    /// Sing up
+    SignUp(String, SignUpOrigin),
     /// Check account,
     CheckAccount(String),
     /// Account Admitted
@@ -148,7 +148,7 @@ impl Payment {
         tokio::select! {
             m = self.payment_rx.recv() => {
                 match m {
-                    Ok(PaymentMessage::NewAccount(pubkey, origin)) => {
+                    Ok(PaymentMessage::SignUp(pubkey, origin)) => {
                         info!("payment event for {:?}", pubkey);
                         // REVIEW: This will need to change for cost per event
                         let amount = self.settings.pay_to_relay.admission_cost;
@@ -240,7 +240,7 @@ impl Payment {
         &self,
         pubkey: &str,
         amount: u64,
-        origin: NewAccountRequestOrigin,
+        origin: SignUpOrigin,
     ) -> Result<InvoiceInfo> {
         // If user is already in DB this will be false
         // This avoids recreating admission invoices
@@ -254,7 +254,7 @@ impl Payment {
         }
 
         match origin {
-            NewAccountRequestOrigin::Web => {
+            SignUpOrigin::Web => {
                 let invoice_info = self.processor.get_invoice(&key, amount).await?;
 
                 // Persist invoice to DB
@@ -268,7 +268,7 @@ impl Payment {
 
                 Ok(invoice_info)
             }
-            NewAccountRequestOrigin::Event => {
+            SignUpOrigin::Event => {
                 self.send_admission_message(pubkey, None).await?;
                 Err(Error::AuthFailure)
             }
