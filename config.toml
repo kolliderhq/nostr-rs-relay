@@ -194,14 +194,14 @@ admission_cost = 200
 #cost_per_event = 0
 
 # Url of lnbits api
-node_url = "https://lnbits.eldamar.icu/api/v1/wallet"
+node_url = ""
 
 # LNBits api secret
-api_secret = "428aad58752f42509849f2a8a69e2714"
+api_secret = ""
 
 
 # Terms of service
-terms_message = "yo boi"
+terms_message = ""
 #This service (and supporting services) are provided "as is", without warranty of any kind, express or implied.
 #
 #By using this service, you agree:
@@ -223,4 +223,4 @@ terms_message = "yo boi"
 #sign_ups = false
 #secret_key = "<nostr nsec>"
 sign_ups = true
-secret_key = "nsec10346sjttfrcer206ggvlzctgzcx6vr8jega52lvj69x25cwd4rtq4f5lny"
+secret_key = ""
