@@ -765,7 +765,7 @@ impl NostrRepo for SqliteRepo {
         tokio::task::spawn_blocking(move || {
             let tx = conn.transaction()?;
             {
-                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1, subscribed_until = MAX(COALESCE(subscribed_until, strftime('%s','now')), strftime('%s','now')) + ?2 WHERE pubkey=?3;";
+                let query = "UPDATE account SET is_admitted = TRUE, tos_accepted_at =  strftime('%s','now'), balance = balance - ?1, subscribed_until = MAX(COALESCE(subscribed_until, CAST(strftime('%s','now') AS INTEGER)), CAST(strftime('%s','now') AS INTEGER)) + ?2 WHERE pubkey=?3;";
                 let mut stmt = tx.prepare(query)?;
                 let admission_interval = admission_days * 24 * 60 * 60;
                 stmt.execute(params![admission_cost, admission_interval, pub_key])?;

@@ -385,14 +385,11 @@ async fn handle_web_request(
             }
 
             // Checks if user is already admitted
-            if let Ok((admission_status, _, _)) = repo.get_account_balance(&key.unwrap()).await {
-                if admission_status {
-                    return Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .body(Body::from("Already admitted"))
-                        .unwrap());
-                }
-            }
+            let subscribed_until = repo.get_account_balance(&key.unwrap()).await.ok().and_then(
+                |(_admission_status, _balance, subscribed_until)| {
+                    subscribed_until.map(|dt| dt.timestamp())
+                },
+            );
             let payment_message = PaymentMessage::SignUp(pubkey.clone(), SignUpOrigin::Web);
 
             // Send message on payment channel requesting invoice
@@ -441,7 +438,8 @@ async fn handle_web_request(
             let resp = json!({
                 "invoice": invoice_info.bolt11,
                 "price": settings.pay_to_relay.admission_cost,
-                "pubkey": pubkey
+                "pubkey": pubkey,
+                "current_subscription_until": subscribed_until
             });
 
             Ok(Response::builder()

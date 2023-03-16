@@ -703,7 +703,7 @@ ON CONFLICT (id) DO NOTHING"#,
         let query = r#"
 SELECT amount, payment_hash, description, invoice
 FROM invoice
-WHERE pubkey = $1
+WHERE pubkey = $1 AND status = 'Unpaid'
 ORDER BY created_at DESC
 LIMIT 1;
         "#;

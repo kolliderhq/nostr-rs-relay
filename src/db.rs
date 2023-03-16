@@ -222,6 +222,14 @@ pub async fn db_writer(
                                 .try_send(Notice::blocked(event.id, "User is not admitted"))
                                 .ok();
                             continue;
+                        } else {
+                            // even if the user is admitted, but has got any unpaid invoice
+                            // check whether it was paid to extend subscription
+                            if repo.get_unpaid_invoice(&key).await.ok().flatten().is_some() {
+                                payment_tx
+                                    .send(PaymentMessage::CheckAccount(event.pubkey.clone()))
+                                    .ok();
+                            }
                         }
 
                         // Checks that user has enough balance to post
