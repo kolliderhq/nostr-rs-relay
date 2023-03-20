@@ -150,6 +150,7 @@ async fn handle_web_request(
                                     ws_stream,
                                     broadcast,
                                     event_tx,
+                                    payment_tx,
                                     shutdown,
                                     metrics,
                                 ));
@@ -949,6 +950,7 @@ async fn nostr_server(
     mut ws_stream: WebSocketStream<Upgraded>,
     broadcast: Sender<Event>,
     event_tx: mpsc::Sender<SubmittedEvent>,
+    payment_tx: Sender<PaymentMessage>,
     mut shutdown: Receiver<()>,
     metrics: NostrMetrics,
 ) {
@@ -1149,6 +1151,11 @@ async fn nostr_server(
                                 metrics.cmd_event.inc();
                                 let id_prefix:String = e.id.chars().take(8).collect();
                                 debug!("successfully parsed/validated event: {:?} (cid: {}, kind: {})", id_prefix, cid, e.kind);
+                                if settings.authorization.nip42_auth && !conn.is_authenticated() {
+                                    let notice = Notice::blocked(e.id, "User is not authenticated");
+                                    ws_stream.send(make_notice_message(&notice)).await.ok();
+                                    continue;
+                                }
                                 // check if event is expired
                                 if e.is_expired() {
                                     let notice = Notice::invalid(e.id, "The event has already expired");
@@ -1185,6 +1192,27 @@ async fn nostr_server(
                                             error!("AUTH command received, but relay_url is not set in the config file (cid: {})", cid);
                                         },
                                         Some(relay) => {
+                                            if let Ok(keys) = Keys::from_pk_str(&event.pubkey) {
+                                                if let Ok((is_admitted, _balance, _susbcribed_until)) = repo.get_account_balance(&keys).await {
+                                                    if !is_admitted {
+                                                        if let Ok(Some(_unpaid)) = repo.get_unpaid_invoice(&keys).await {
+                                                            if let Err(err) = payment_tx.send(PaymentMessage::CheckAccount(keys.public_key().to_string())) {
+                                                                error!("Failed to send CheckAccount message to payment processor, error: {:?}", err);
+                                                            }
+                                                        }
+                                                        let notice = Notice::blocked(event.id, "User is not admitted");
+                                                        ws_stream.send(make_notice_message(&notice)).await.ok();
+                                                        continue;
+                                                    }
+                                                }
+                                                else {
+                                                    let notice = Notice::blocked(event.id, "User is not admitted");
+                                                    ws_stream.send(make_notice_message(&notice)).await.ok();
+                                                    continue;
+                                                }
+                                            } else {
+                                                continue;
+                                            }
                                             match conn.authenticate(&event, &relay) {
                                                 Ok(_) => {
                                                     let pubkey = match conn.auth_pubkey() {
@@ -1216,11 +1244,17 @@ async fn nostr_server(
                     Ok(NostrMessage::SubMsg(s)) => {
                         debug!("subscription requested (cid: {}, sub: {:?})", cid, s.id);
                         // subscription handling consists of:
+                        // * check for authentication
                         // * check for rate limits
                         // * registering the subscription so future events can be matched
                         // * making a channel to cancel to request later
                         // * sending a request for a SQL query
                         // Do nothing if the sub already exists.
+                        if settings.authorization.nip42_auth && !conn.is_authenticated() {
+                            let notice = Notice::blocked(String::new(), "User is not authenticated");
+                            ws_stream.send(make_notice_message(&notice)).await.ok();
+                            continue;
+                        }
                         if conn.has_subscription(&s) {
                             info!("client sent duplicate subscription, ignoring (cid: {}, sub: {:?})", cid, s.id);
                         } else {

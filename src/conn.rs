@@ -90,6 +90,10 @@ impl ClientConn {
         }
     }
 
+    pub fn is_authenticated(&self) -> bool {
+        self.auth_pubkey().is_some()
+    }
+
     #[must_use]
     pub fn auth_challenge(&self) -> Option<&String> {
         match &self.auth {
